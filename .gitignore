@@ -1,0 +1,26 @@
+# Python
+backend/venv/
+backend/__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Secrets
+backend/credentials.json
+backend/.env
+.env
+.env.local
+**/.env
+
+# Chroma
+backend/chroma_data/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+*.log
+
+# IDE
+.idea/
+.vscode/
