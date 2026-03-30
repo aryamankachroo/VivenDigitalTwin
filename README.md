@@ -1,6 +1,6 @@
-# TwinAI — Your AI-powered second brain
+# AryamanKachrooTwin — My AI-powered second brain
 
-TwinAI is a personal digital twin that knows your schedule and inbox. Connect your Google account and ask it anything about your own life — it answers from your actual data, not guesswork.
+This is a personal digital twin that knows my schedule and inbox. Connect your Google account and ask it anything about your own life — it answers from your actual data, not guesswork.
 
 ## What it can do
 
@@ -10,7 +10,7 @@ TwinAI is a personal digital twin that knows your schedule and inbox. Connect yo
 
 ## How it gets your data
 
-TwinAI connects to two Google data sources via read-only OAuth 2.0:
+AryamanKachrooTwin connects to two Google data sources via read-only OAuth 2.0:
 
 **Gmail**
 Fetches your 100 most recent inbox messages and indexes them so you can ask questions about senders, subjects, and content.
