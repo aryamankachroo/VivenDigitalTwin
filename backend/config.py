@@ -28,3 +28,6 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/calendar.readonly",
 ]
+
+# How many newest inbox messages to embed per sync (pool for sorting is capped in gmail.py).
+SYNC_EMAIL_LIMIT = int(os.getenv("SYNC_EMAIL_LIMIT", "50"))

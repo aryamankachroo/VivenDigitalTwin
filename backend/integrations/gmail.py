@@ -2,7 +2,6 @@ import base64
 from typing import Any
 
 from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
 
 from auth import credentials_from_session
 
@@ -34,51 +33,77 @@ def _extract_plain_text(payload: dict[str, Any]) -> str:
     return ""
 
 
+def _parse_message_to_email(message: dict, msg_id: str) -> dict:
+    headers = message.get("payload", {}).get("headers", [])
+    subject = next(
+        (h["value"] for h in headers if h["name"].lower() == "subject"),
+        "No Subject",
+    )
+    from_email = next(
+        (h["value"] for h in headers if h["name"].lower() == "from"), "Unknown"
+    )
+    date = next(
+        (h["value"] for h in headers if h["name"].lower() == "date"), "Unknown"
+    )
+    body = _extract_plain_text(message.get("payload", {}))
+    return {
+        "id": msg_id,
+        "subject": subject,
+        "from": from_email,
+        "date": date,
+        "body": body[:500],
+    }
+
+
 def get_recent_emails(credentials_dict: dict, max_results: int = 20) -> list[dict]:
+    """Return up to ``max_results`` inbox messages newest-first by ``internalDate``.
+
+    Gmail's message list order does not always match the inbox UI (threads,
+    categories). We sort using each message's ``internalDate`` from the API.
+    """
     credentials = credentials_from_session(credentials_dict)
     service = build("gmail", "v1", credentials=credentials)
 
+    pool_size = min(100, max(50, max_results * 3))
     results = (
         service.users()
         .messages()
-        .list(userId="me", maxResults=max_results, labelIds=["INBOX"])
+        .list(
+            userId="me",
+            maxResults=pool_size,
+            labelIds=["INBOX"],
+            includeSpamTrash=False,
+        )
         .execute()
     )
 
-    messages = results.get("messages", [])
-    emails: list[dict] = []
+    refs = results.get("messages", [])
+    if not refs:
+        return []
 
-    for msg_ref in messages:
-        msg_id = msg_ref["id"]
+    scored: list[tuple[int, str]] = []
+    for ref in refs:
+        mid = ref["id"]
+        meta = (
+            service.users()
+            .messages()
+            .get(userId="me", id=mid, format="metadata")
+            .execute()
+        )
+        ts = int(meta.get("internalDate") or 0)
+        scored.append((ts, mid))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top_ids = [mid for _, mid in scored[:max_results]]
+
+    emails: list[dict] = []
+    for msg_id in top_ids:
         message = (
             service.users()
             .messages()
             .get(userId="me", id=msg_id, format="full")
             .execute()
         )
-
-        headers = message.get("payload", {}).get("headers", [])
-        subject = next(
-            (h["value"] for h in headers if h["name"].lower() == "subject"),
-            "No Subject",
-        )
-        from_email = next(
-            (h["value"] for h in headers if h["name"].lower() == "from"), "Unknown"
-        )
-        date = next(
-            (h["value"] for h in headers if h["name"].lower() == "date"), "Unknown"
-        )
-
-        body = _extract_plain_text(message.get("payload", {}))
-
-        emails.append(
-            {
-                "id": msg_id,
-                "subject": subject,
-                "from": from_email,
-                "date": date,
-                "body": body[:500],
-            }
-        )
+        emails.append(_parse_message_to_email(message, msg_id))
 
     return emails

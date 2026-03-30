@@ -75,6 +75,12 @@ class VectorStore:
             documents=documents, metadatas=metadatas, ids=ids
         )
 
+    def collection_counts(self) -> dict[str, int]:
+        return {
+            "emails": self.emails_collection.count(),
+            "calendar": self.calendar_collection.count(),
+        }
+
     def query(self, query_text: str, n_results: int = 5) -> dict:
         email_results = self.emails_collection.query(
             query_texts=[query_text],

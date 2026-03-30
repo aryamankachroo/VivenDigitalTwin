@@ -1,4 +1,5 @@
 import secrets
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, request, session
@@ -38,7 +39,12 @@ def health():
 
 @app.route("/api/auth/status", methods=["GET"])
 def auth_status():
-    return jsonify({"authenticated": _credentials_ok()})
+    return jsonify(
+        {
+            "authenticated": _credentials_ok(),
+            "last_synced_at": session.get("last_synced_at"),
+        }
+    )
 
 
 @app.route("/auth/google/login", methods=["GET"])
@@ -122,15 +128,23 @@ def sync_data():
         return jsonify({"error": "Not authenticated"}), 401
 
     credentials = session["google_credentials"]
-    emails = get_recent_emails(credentials)
+    emails = get_recent_emails(credentials, max_results=config.SYNC_EMAIL_LIMIT)
     events = get_calendar_events_for_sync(credentials)
     vector_store.add_emails(emails)
     vector_store.add_events(events)
+
+    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    session["last_synced_at"] = now_iso
+
+    counts = vector_store.collection_counts()
 
     return jsonify(
         {
             "synced_emails": len(emails),
             "synced_events": len(events),
+            "last_synced_at": now_iso,
+            "index_email_documents": counts["emails"],
+            "index_calendar_documents": counts["calendar"],
         }
     )
 
@@ -149,7 +163,11 @@ def chat():
         return jsonify({"error": "OPENAI_API_KEY is not configured"}), 500
 
     try:
-        response_text = create_twin_response(str(message).strip(), vector_store)
+        response_text = create_twin_response(
+            str(message).strip(),
+            vector_store,
+            google_credentials=session.get("google_credentials"),
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

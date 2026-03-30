@@ -1,43 +1,28 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
+import { API_BASE } from '../api'
 
-export default function OAuth({ onAuthSuccess }) {
-  const [syncing, setSyncing] = useState(false)
-  const [status, setStatus] = useState('')
+export default function OAuth({ onGoogleConnected }) {
   const [error, setError] = useState('')
 
-  const syncData = async () => {
-    setSyncing(true)
-    setStatus('Syncing data...')
-    setError('')
-    try {
-      const response = await axios.post('http://localhost:5000/api/sync')
-      setStatus(`Synced ${response.data.synced_emails} emails and ${response.data.synced_events} events.`)
-    } catch (err) {
-      const msg = err?.response?.data?.error || 'Failed to sync data.'
-      setError(msg)
-      setStatus('')
-    } finally {
-      setSyncing(false)
-    }
-  }
+  const handleMessage = useCallback(
+    (event) => {
+      if (event?.data?.type === 'auth_success') {
+        onGoogleConnected?.()
+      }
+    },
+    [onGoogleConnected]
+  )
 
   useEffect(() => {
-    const listener = (event) => {
-      if (event?.data?.type === 'auth_success') {
-        onAuthSuccess()
-        syncData()
-      }
-    }
-    window.addEventListener('message', listener)
-    return () => window.removeEventListener('message', listener)
-  }, [onAuthSuccess])
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [handleMessage])
 
   const handleGoogleLogin = async () => {
     setError('')
-    setStatus('')
     try {
-      const response = await axios.get('http://localhost:5000/auth/google/login')
+      const response = await axios.get(`${API_BASE}/auth/google/login`)
       window.open(response.data.auth_url, '_blank', 'width=500,height=650')
     } catch (err) {
       const msg = err?.response?.data?.error || 'Google login failed.'
@@ -49,13 +34,15 @@ export default function OAuth({ onAuthSuccess }) {
     <div className="p-6 text-center">
       <button
         onClick={handleGoogleLogin}
-        disabled={syncing}
-        className="rounded-lg bg-green-500 px-6 py-3 text-lg text-white hover:bg-green-600 disabled:bg-gray-400"
+        className="rounded-lg bg-green-500 px-6 py-3 text-lg text-white hover:bg-green-600"
       >
         Connect Google Account
       </button>
-      {status && <p className="mt-4 text-gray-700">{status}</p>}
       {error && <p className="mt-4 text-red-600">{error}</p>}
+      <p className="mx-auto mt-3 max-w-md text-sm text-gray-500">
+        After you sign in, we will sync your recent mail and calendar into the
+        twin automatically.
+      </p>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
+import { API_BASE } from '../api'
 
 export default function Chat({ isAuthenticated }) {
   const [messages, setMessages] = useState([])
@@ -18,7 +19,7 @@ export default function Chat({ isAuthenticated }) {
     setError('')
 
     try {
-      const response = await axios.post('http://localhost:5000/api/chat', {
+      const response = await axios.post(`${API_BASE}/api/chat`, {
         message: text,
       })
       const assistantMessage = { role: 'assistant', content: response.data.response }
