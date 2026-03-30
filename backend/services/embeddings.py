@@ -113,6 +113,20 @@ class VectorStore:
 
         return result
 
+    def search_emails_by_keywords(self, keywords: list[str]) -> list[str]:
+        """Case-insensitive substring scan across all stored email documents.
+        Used as a fallback when vector search misses exact codes/names."""
+        if not keywords:
+            return []
+        all_data = self.emails_collection.get(include=["documents"])
+        docs = all_data.get("documents") or []
+        matched: list[str] = []
+        for doc in docs:
+            doc_lower = doc.lower()
+            if any(kw.lower() in doc_lower for kw in keywords):
+                matched.append(doc)
+        return matched
+
     def collection_counts(self) -> dict[str, int]:
         return {
             "emails": self.emails_collection.count(),

@@ -23,6 +23,74 @@ _EMAIL_WORDS = re.compile(
 
 _DAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
+# Common words that look like keywords but aren't useful to search
+_KEYWORD_STOPWORDS = {
+    "ABOUT", "THAT", "WITH", "FROM", "HAVE", "THEY", "BEEN", "THIS",
+    "WHAT", "TELL", "PLEASE", "JUST", "ALSO", "WHEN", "BACK", "KNOW",
+    "DOES", "SOME", "STILL", "WANT", "NEED", "WILL", "MORE", "THEN",
+}
+
+
+def _extract_keywords(text: str) -> list[str]:
+    """Extract distinctive tokens worth doing a keyword scan for:
+    - Course codes like 'ITSC 2175' or 'CS101'
+    - Abbreviations/acronyms like 'UIUC', 'usc', 'GRE' (2-6 letters, all same case)
+    - Long words (7+ chars) that are specific nouns
+    """
+    keywords: list[str] = []
+    # Course codes: letters + optional space + digits (e.g. "ITSC 2175", "cs101")
+    for m in re.finditer(r"\b([A-Za-z]{2,6})\s*(\d{3,4})\b", text):
+        keywords.append(m.group(0).replace(" ", ""))  # "ITSC2175"
+        keywords.append(m.group(0))                   # "ITSC 2175"
+        keywords.append(m.group(1))                   # "ITSC"
+    # Abbreviations: all-caps words (UIUC, USC) OR short lowercase words that
+    # are clearly acronyms typed in lowercase (uiuc, mit) — require 3+ chars
+    # and exclude anything that looks like a common English word
+    _common = {
+        "the", "and", "for", "are", "but", "not", "you", "all", "can",
+        "had", "her", "was", "one", "our", "out", "day", "get", "has",
+        "him", "his", "how", "its", "may", "new", "now", "old", "see",
+        "two", "who", "did", "let", "put", "say", "she", "too", "use",
+        "yet", "any", "did", "far", "few", "got", "him", "own", "why",
+        "ago", "aim", "ask", "big", "bit", "due", "end", "end", "era",
+        "etc", "lot", "low", "met", "off", "per", "set", "six", "ten",
+        "top", "try", "via", "yes", "way", "him", "did", "hear", "back",
+        "just", "like", "make", "much", "some", "such", "tell", "then",
+        "they", "this", "with", "also", "been", "does", "from", "have",
+        "here", "into", "more", "most", "need", "over", "said", "same",
+        "than", "that", "them", "well", "were", "what", "when", "will",
+        "your", "about", "after", "again", "could", "every", "first",
+        "going", "great", "know", "other", "their", "there", "think",
+        "where", "while", "would", "being", "came", "come", "each",
+        "even", "find", "give", "good", "help", "hold", "home", "just",
+        "keep", "kind", "last", "left", "life", "like", "long", "look",
+        "made", "main", "mean", "mine", "must", "my", "name", "next",
+        "only", "open", "part", "past", "plan", "play", "real", "right",
+        "sent", "show", "side", "size", "soon", "stay", "sure", "take",
+        "talk", "time", "told", "took", "true", "turn", "type", "upon",
+        "used", "very", "view", "want", "ways", "week", "went", "word",
+        "work", "year", "able", "both", "call", "case", "copy", "date",
+        "done", "down", "drop", "else", "feel", "felt", "free", "full",
+        "goes", "gone", "grow", "half", "hard", "head", "high", "idea",
+        "join", "late", "lead", "less", "lets", "lost", "love", "many",
+        "mark", "miss", "move", "note", "once", "page", "paid", "pick",
+        "plus", "post", "pull", "push", "puts", "read", "rely", "rest",
+        "role", "room", "runs", "save", "self", "send", "sign", "skip",
+        "sort", "spot", "stop", "such", "task", "test", "text", "thus",
+        "till", "told", "tool", "into", "you", "me", "if", "my", "or",
+        "how", "any", "did",
+    }
+    for m in re.finditer(r"\b([A-Za-z]{3,6})\b", text):
+        word = m.group(1)
+        if word.lower() not in _common and word.upper() not in _KEYWORD_STOPWORDS and (
+            word.isupper() or (word.islower() and len(word) >= 3 and word not in _common)
+        ):
+            keywords.append(word)
+    # Long specific words (university/company names, etc.)
+    for m in re.finditer(r"\b([A-Za-z]{7,})\b", text):
+        keywords.append(m.group(1))
+    return list(dict.fromkeys(keywords))  # deduplicate preserving order
+
 
 def _intent(text: str) -> str:
     has_cal = bool(_CALENDAR_WORDS.search(text))
@@ -133,6 +201,18 @@ def create_twin_response(user_message: str, vector_store) -> str:
     if intent in ("email", "both"):
         context_data = vector_store.query(user_message, n_results=10)
         email_docs = _docs(context_data.get("emails") or {}, 8)
+
+        # Keyword fallback: course codes and proper nouns that vector search misses
+        keywords = _extract_keywords(user_message)
+        if keywords:
+            kw_docs = vector_store.search_emails_by_keywords(keywords)
+            # Merge without duplicates (keyword hits first so they're in context)
+            seen = set(email_docs)
+            for d in kw_docs:
+                if d not in seen:
+                    email_docs.append(d)
+                    seen.add(d)
+        email_docs = email_docs[:10]  # cap total
 
     if not cal_docs and not email_docs:
         return (

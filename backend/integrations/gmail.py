@@ -51,7 +51,7 @@ def _parse_message_to_email(message: dict, msg_id: str) -> dict:
         "subject": subject,
         "from": from_email,
         "date": date,
-        "body": body[:500],
+        "body": body[:1000],
     }
 
 
@@ -64,7 +64,8 @@ def get_recent_emails(credentials_dict: dict, max_results: int = 20) -> list[dic
     credentials = credentials_from_session(credentials_dict)
     service = build("gmail", "v1", credentials=credentials)
 
-    pool_size = min(100, max(50, max_results * 3))
+    # Use a large pool so emails from the past week don't get cut off
+    pool_size = min(500, max(200, max_results * 4))
     results = (
         service.users()
         .messages()
