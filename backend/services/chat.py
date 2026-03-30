@@ -20,6 +20,15 @@ _EMAIL_WORDS = re.compile(
     r"last email|recent email|unread)\b",
     re.IGNORECASE,
 )
+_DRIVE_WORDS = re.compile(
+    r"\b(drive|google drive|document|documents|doc|docs|pdf|file|files|"
+    r"resume|cv|literature review|lit review|slides|sheet|sheets)\b",
+    re.IGNORECASE,
+)
+_DRIVE_LIST_QUERY = re.compile(
+    r"\b(last|recent|latest)\s+(\d{1,3})?\s*(files?|documents?|docs?)\b",
+    re.IGNORECASE,
+)
 
 _DAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
@@ -95,10 +104,13 @@ def _extract_keywords(text: str) -> list[str]:
 def _intent(text: str) -> str:
     has_cal = bool(_CALENDAR_WORDS.search(text))
     has_email = bool(_EMAIL_WORDS.search(text))
-    if has_cal and not has_email:
+    has_drive = bool(_DRIVE_WORDS.search(text))
+    if has_cal and not has_email and not has_drive:
         return "calendar"
-    if has_email and not has_cal:
+    if has_email and not has_cal and not has_drive:
         return "email"
+    if has_drive and not has_cal and not has_email:
+        return "drive"
     return "both"
 
 
@@ -173,12 +185,49 @@ def _docs(result: dict, limit: int = 8) -> list[str]:
     return list(docs_batch[0])[:limit]
 
 
+def _parse_drive_list_limit(text: str, default_limit: int = 30) -> int | None:
+    """Return requested drive-list limit for queries like 'last 30 files'."""
+    if "drive" not in text.lower() and "file" not in text.lower() and "doc" not in text.lower():
+        return None
+    m = _DRIVE_LIST_QUERY.search(text)
+    if not m:
+        return None
+    raw = m.group(2)
+    if not raw:
+        return default_limit
+    try:
+        n = int(raw)
+    except ValueError:
+        return default_limit
+    return max(1, min(n, 100))
+
+
 # ── main entry point ──────────────────────────────────────────────────────────
 
 def create_twin_response(user_message: str, vector_store) -> str:
+    drive_list_limit = _parse_drive_list_limit(user_message)
+    if drive_list_limit is not None:
+        files = vector_store.get_recent_drive_files(limit=drive_list_limit)
+        if not files:
+            return (
+                "I do not have synced Drive files yet. "
+                "Click Sync again and ask once it completes."
+            )
+        lines: list[str] = []
+        for i, f in enumerate(files, start=1):
+            name = f.get("name") or "Untitled"
+            created = f.get("created") or f.get("modified") or "Unknown time"
+            link = f.get("link") or ""
+            if link:
+                lines.append(f"{i}. {name} ({created}) - {link}")
+            else:
+                lines.append(f"{i}. {name} ({created})")
+        return "Here are your most recent synced Drive files:\n" + "\n".join(lines)
+
     intent = _intent(user_message)
     cal_docs: list[str] = []
     email_docs: list[str] = []
+    drive_docs: list[str] = []
 
     if intent in ("calendar", "both"):
         date_window = _resolve_date_window(user_message)
@@ -199,22 +248,35 @@ def create_twin_response(user_message: str, vector_store) -> str:
             cal_docs = _docs(context_data.get("calendar") or {}, 8)
 
     if intent in ("email", "both"):
+        date_window = _resolve_date_window(user_message)
+        if date_window and date_window[0] == date_window[1]:
+            # Email query for a specific day ("today", "yesterday", weekday, etc.)
+            email_docs = vector_store.get_emails_on_date(date_window[0])
+            if not email_docs:
+                label = date_window[0].strftime("%A, %B %d, %Y").replace(" 0", " ")
+                email_docs = [f"[No emails found for {label}]"]
+        else:
+            # General email query (no specific date): use vector + keyword search
+            context_data = vector_store.query(user_message, n_results=10)
+            email_docs = _docs(context_data.get("emails") or {}, 8)
+
+            # Keyword fallback: course codes and proper nouns that vector search misses
+            keywords = _extract_keywords(user_message)
+            if keywords:
+                kw_docs = vector_store.search_emails_by_keywords(keywords)
+                # Merge without duplicates (keyword hits first so they're in context)
+                seen = set(email_docs)
+                for d in kw_docs:
+                    if d not in seen:
+                        email_docs.append(d)
+                        seen.add(d)
+            email_docs = email_docs[:10]  # cap total
+
+    if intent in ("drive", "both"):
         context_data = vector_store.query(user_message, n_results=10)
-        email_docs = _docs(context_data.get("emails") or {}, 8)
+        drive_docs = _docs(context_data.get("drive") or {}, 8)
 
-        # Keyword fallback: course codes and proper nouns that vector search misses
-        keywords = _extract_keywords(user_message)
-        if keywords:
-            kw_docs = vector_store.search_emails_by_keywords(keywords)
-            # Merge without duplicates (keyword hits first so they're in context)
-            seen = set(email_docs)
-            for d in kw_docs:
-                if d not in seen:
-                    email_docs.append(d)
-                    seen.add(d)
-        email_docs = email_docs[:10]  # cap total
-
-    if not cal_docs and not email_docs:
+    if not cal_docs and not email_docs and not drive_docs:
         return (
             "I do not have that in the synced data. "
             "Try clicking Sync again to refresh, then ask again."
@@ -226,6 +288,7 @@ def create_twin_response(user_message: str, vector_store) -> str:
         "Answer the user's question using ONLY the data sections below.\n"
         "Do NOT let email content override or cancel calendar events.\n"
         "Do NOT let calendar data override email content.\n"
+        "Do NOT claim missing Drive access if DRIVE FILES data is present below.\n"
         "Each section is a separate, authoritative source. "
         "If the answer is not in the data, say so.\n\n"
     )
@@ -238,6 +301,11 @@ def create_twin_response(user_message: str, vector_store) -> str:
     if email_docs:
         system += "EMAILS (from Gmail):\n"
         for doc in email_docs:
+            system += f"{doc}\n\n"
+
+    if drive_docs:
+        system += "DRIVE FILES (from Google Drive):\n"
+        for doc in drive_docs:
             system += f"{doc}\n\n"
 
     response = _get_client().chat.completions.create(

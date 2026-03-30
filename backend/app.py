@@ -8,6 +8,7 @@ from flask_cors import CORS
 import config
 from auth import credentials_from_callback, get_auth_url
 from integrations.calendar import get_calendar_events_for_sync
+from integrations.drive import get_recent_files
 from integrations.gmail import get_recent_emails, get_user_email
 from services.chat import create_twin_response
 from services.embeddings import VectorStore
@@ -118,8 +119,10 @@ def sync_data():
     credentials = session["google_credentials"]
     emails = get_recent_emails(credentials, max_results=config.SYNC_EMAIL_LIMIT)
     events = get_calendar_events_for_sync(credentials)
+    files = get_recent_files(credentials, max_results=config.SYNC_DRIVE_LIMIT)
     vector_store.add_emails(emails)
     vector_store.add_events(events)
+    vector_store.add_files(files)
 
     now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     session["last_synced_at"] = now_iso
@@ -134,9 +137,11 @@ def sync_data():
         {
             "synced_emails": len(emails),
             "synced_events": len(events),
+            "synced_files": len(files),
             "last_synced_at": now_iso,
             "index_email_documents": counts["emails"],
             "index_calendar_documents": counts["calendar"],
+            "index_drive_documents": counts["drive"],
             "user_email": session.get("user_email", ""),
         }
     )

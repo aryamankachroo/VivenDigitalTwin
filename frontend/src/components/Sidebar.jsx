@@ -42,7 +42,7 @@ function SettingsIcon() {
   )
 }
 
-export default function Sidebar({ activeTab, setActiveTab, userEmail }) {
+export default function Sidebar({ activeTab, setActiveTab, userEmail, onAccountClick }) {
   const initials = userEmail
     ? userEmail.charAt(0).toUpperCase()
     : '?'
@@ -83,7 +83,13 @@ export default function Sidebar({ activeTab, setActiveTab, userEmail }) {
       </nav>
 
       {/* User */}
-      <div className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-3">
+      <button
+        type="button"
+        onClick={() => {
+          onAccountClick?.()
+        }}
+        className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-3 text-left transition-colors hover:bg-gray-100"
+      >
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-sm font-semibold text-indigo-700">
           {initials}
         </div>
@@ -91,7 +97,7 @@ export default function Sidebar({ activeTab, setActiveTab, userEmail }) {
           <p className="truncate text-xs font-medium text-gray-900">{displayEmail}</p>
           <p className="text-xs text-gray-400">Google Account</p>
         </div>
-      </div>
+      </button>
     </aside>
   )
 }

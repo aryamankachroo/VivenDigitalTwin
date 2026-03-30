@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { API_BASE } from './api'
 import Landing from './components/Landing'
 import Onboarding from './components/Onboarding'
@@ -11,8 +12,10 @@ import Settings from './components/Settings'
 axios.defaults.withCredentials = true
 
 export default function App() {
-  // screen: 'loading' | 'landing' | 'onboarding' | 'app'
-  const [screen, setScreen] = useState('loading')
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [booted, setBooted] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   // tab inside 'app': 'home' | 'integrations' | 'settings'
   const [activeTab, setActiveTab] = useState('home')
 
@@ -28,12 +31,15 @@ export default function App() {
     try {
       const res = await axios.get(`${API_BASE}/api/auth/status`)
       if (res.data.authenticated) {
+        setIsAuthenticated(true)
         setUserEmail(res.data.user_email || '')
         setLastSyncedAt(res.data.last_synced_at ?? null)
         return true
       }
+      setIsAuthenticated(false)
       return false
     } catch {
+      setIsAuthenticated(false)
       return false
     }
   }, [])
@@ -56,11 +62,17 @@ export default function App() {
       if (res.data.user_email) setUserEmail(res.data.user_email)
       return { ok: true, data: res.data }
     } catch (err) {
+      if (err?.response?.status === 401) {
+        setIsAuthenticated(false)
+        setUserEmail('')
+        navigate('/signin', { replace: true, state: { from: location.pathname } })
+        return { ok: false, error: 'Not authenticated' }
+      }
       const msg = err?.response?.data?.error || 'Sync failed'
       setSyncError(msg)
       return { ok: false, error: msg }
     }
-  }, [])
+  }, [navigate, location.pathname])
 
   // ── boot: check if already authenticated ──────────────────────────────────
 
@@ -68,26 +80,26 @@ export default function App() {
     refreshStatus().then((authenticated) => {
       if (authenticated) {
         fetchUpcoming()
-        setScreen('app')
-      } else {
-        setScreen('landing')
       }
+      setBooted(true)
     })
   }, [refreshStatus, fetchUpcoming])
 
   // ── oauth success → onboarding ─────────────────────────────────────────────
 
   const handleGoogleConnected = useCallback(async () => {
-    await refreshStatus()
-    setScreen('onboarding')
-  }, [refreshStatus])
+    const ok = await refreshStatus()
+    if (ok) {
+      navigate('/onboarding', { replace: true })
+    }
+  }, [refreshStatus, navigate])
 
   // ── onboarding "build" → run sync then open dashboard ─────────────────────
 
   const handleBuildTwin = useCallback(async () => {
     const result = await runSync()
     if (result.ok) await fetchUpcoming()
-    setScreen('app')
+    navigate('/', { replace: true })
   }, [runSync, fetchUpcoming])
 
   // ── sync again (from dashboard) ────────────────────────────────────────────
@@ -100,7 +112,7 @@ export default function App() {
 
   // ── render ─────────────────────────────────────────────────────────────────
 
-  if (screen === 'loading') {
+  if (!booted) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
@@ -108,21 +120,15 @@ export default function App() {
     )
   }
 
-  if (screen === 'landing') {
-    return <Landing onGoogleConnected={handleGoogleConnected} />
-  }
-
-  if (screen === 'onboarding') {
-    return <Onboarding onBuildTwin={handleBuildTwin} />
-  }
-
-  // 'app' screen — sidebar + content
-  return (
+  const AppShell = (
     <div className="flex h-screen overflow-hidden bg-gray-50">
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         userEmail={userEmail}
+        onAccountClick={() => {
+          if (!isAuthenticated) navigate('/signin')
+        }}
       />
 
       <main className="flex-1 overflow-hidden">
@@ -152,5 +158,29 @@ export default function App() {
         )}
       </main>
     </div>
+  )
+
+  return (
+    <Routes>
+      <Route
+        path="/signin"
+        element={<Landing onGoogleConnected={handleGoogleConnected} />}
+      />
+      <Route
+        path="/onboarding"
+        element={
+          isAuthenticated ? (
+            <Onboarding onBuildTwin={handleBuildTwin} />
+          ) : (
+            <Navigate to="/signin" replace />
+          )
+        }
+      />
+      <Route
+        path="/"
+        element={isAuthenticated ? AppShell : <Navigate to="/signin" replace />}
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   )
 }

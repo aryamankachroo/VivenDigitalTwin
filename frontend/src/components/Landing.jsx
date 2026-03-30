@@ -29,6 +29,7 @@ function TwinAILogo() {
 export default function Landing({ onGoogleConnected }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [polling, setPolling] = useState(false)
 
   const handleMessage = useCallback(
     (event) => {
@@ -44,12 +45,41 @@ export default function Landing({ onGoogleConnected }) {
     return () => window.removeEventListener('message', handleMessage)
   }, [handleMessage])
 
+  useEffect(() => {
+    if (!polling) return
+    let cancelled = false
+    let attempts = 0
+
+    const tick = async () => {
+      if (cancelled || attempts > 20) return
+      attempts += 1
+      try {
+        const res = await axios.get(`${API_BASE}/api/auth/status`)
+        if (res.data?.authenticated) {
+          onGoogleConnected?.()
+          return
+        }
+      } catch {
+        // ignore and keep polling
+      }
+      if (!cancelled) {
+        setTimeout(tick, 2000)
+      }
+    }
+
+    tick()
+    return () => {
+      cancelled = true
+    }
+  }, [polling, onGoogleConnected])
+
   const handleGoogleLogin = async () => {
     setError('')
     setLoading(true)
     try {
       const response = await axios.get(`${API_BASE}/auth/google/login`)
       window.open(response.data.auth_url, '_blank', 'width=500,height=650')
+      setPolling(true)
     } catch (err) {
       setError(err?.response?.data?.error || 'Failed to start Google sign-in. Is the backend running?')
     } finally {
