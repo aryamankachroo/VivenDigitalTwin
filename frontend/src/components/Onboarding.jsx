@@ -73,7 +73,7 @@ export default function Onboarding({ onBuildTwin }) {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-6 py-16">
-      <div className="w-full max-w-xl">
+      <div className="w-full max-w-5xl">
         {/* Logo */}
         <div className="mb-10 flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600">
@@ -90,10 +90,10 @@ export default function Onboarding({ onBuildTwin }) {
           <div className="mt-8">
             <h2 className="text-2xl font-bold text-gray-900">Connect your data sources</h2>
             <p className="mt-2 text-gray-500">
-              Your Google account has been authorized. Both data sources below are ready.
+              Your Google account has been authorized. All data sources below are ready.
             </p>
 
-            <div className="mt-8 grid grid-cols-2 gap-4">
+            <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
               <ServiceCard
                 connected
                 name="Gmail"
@@ -124,6 +124,18 @@ export default function Onboarding({ onBuildTwin }) {
                   </svg>
                 }
               />
+              <ServiceCard
+                connected
+                name="Google Drive"
+                description="Read-only access to your Drive — your 30 most recent files will be indexed."
+                icon={
+                  <svg width="24" height="24" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="#0F9D58" d="M16 6h16l10 18H26z" />
+                    <path fill="#F4B400" d="M6 30l10-18 10 18-10 18z" />
+                    <path fill="#4285F4" d="M32 30H12l10-18h20z" />
+                  </svg>
+                }
+              />
             </div>
 
             <button
@@ -133,7 +145,7 @@ export default function Onboarding({ onBuildTwin }) {
               Build my twin →
             </button>
             <p className="mt-3 text-center text-xs text-gray-400">
-              This will index your last 100 emails and calendar events from the past 14 days.
+              This will index your last 100 emails, calendar events from the past 14 days, and your last 30 Drive files.
             </p>
           </div>
         )}
@@ -152,13 +164,14 @@ export default function Onboarding({ onBuildTwin }) {
 
             <h2 className="text-2xl font-bold text-gray-900">Your twin is being built</h2>
             <p className="mt-2 text-gray-500">
-              Indexing your emails and calendar events — this takes about 30–60 seconds.
+              Indexing your emails, calendar events, and Drive files — this takes about 30–60 seconds.
             </p>
 
             <div className="mt-8 w-full space-y-3 text-left">
               {[
                 'Fetching recent inbox messages…',
                 'Fetching calendar events (past & upcoming)…',
+                'Fetching your most recent Drive files…',
                 'Building semantic search index…',
               ].map((step, i) => (
                 <BuildingStep key={i} text={step} delay={i * 1.2} />

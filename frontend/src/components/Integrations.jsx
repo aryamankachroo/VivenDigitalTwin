@@ -29,6 +29,16 @@ function CalendarIcon() {
   )
 }
 
+function DriveIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+      <path fill="#0F9D58" d="M16 6h16l10 18H26z" />
+      <path fill="#F4B400" d="M6 30l10-18 10 18-10 18z" />
+      <path fill="#4285F4" d="M32 30H12l10-18h20z" />
+    </svg>
+  )
+}
+
 const CONNECTED = [
   {
     id: 'gmail',
@@ -43,6 +53,13 @@ const CONNECTED = [
     description: 'Read-only access to your primary calendar. Indexes events 14 days back and 14 days forward.',
     icon: <CalendarIcon />,
     dataNote: '28-day rolling window',
+  },
+  {
+    id: 'drive',
+    name: 'Google Drive',
+    description: 'Read-only access to your Drive. Indexes your 30 most recent files.',
+    icon: <DriveIcon />,
+    dataNote: '30 most recent files',
   },
 ]
 
@@ -93,6 +110,7 @@ export default function Integrations({ lastSyncedAt, onSync, syncStats }) {
                 <div className="mt-1 text-xs text-gray-400">
                   {item.id === 'gmail' && `${syncStats.index_email_documents ?? '—'} email chunks in index`}
                   {item.id === 'calendar' && `${syncStats.index_calendar_documents ?? '—'} event chunks in index`}
+                  {item.id === 'drive' && `${syncStats.index_drive_documents ?? '—'} file chunks in index`}
                 </div>
               )}
             </div>
