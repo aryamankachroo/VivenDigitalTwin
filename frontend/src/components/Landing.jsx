@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../api'
 
@@ -32,20 +32,6 @@ export default function Landing({ onGoogleConnected }) {
   const [polling, setPolling] = useState(false)
   const popupRef = useRef(null)
   const hasNavigatedRef = useRef(false)
-
-  const handleMessage = useCallback(
-    (event) => {
-      if (event?.data?.type === 'auth_success') {
-        // OAuth callback succeeded in popup; final navigation still waits until popup closes.
-      }
-    },
-    []
-  )
-
-  useEffect(() => {
-    window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
-  }, [handleMessage])
 
   useEffect(() => {
     if (!polling) return

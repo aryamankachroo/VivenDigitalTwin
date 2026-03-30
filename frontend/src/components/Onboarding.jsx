@@ -145,7 +145,7 @@ export default function Onboarding({ onBuildTwin }) {
               Build Echo →
             </button>
             <p className="mt-3 text-center text-xs text-gray-400">
-              This will index your last 100 emails, calendar events from the past 14 days, and your last 30 Drive files.
+              This will index your last 100 emails, calendar events from the past 14 days and next 14 days, and your last 30 Drive files.
             </p>
           </div>
         )}
