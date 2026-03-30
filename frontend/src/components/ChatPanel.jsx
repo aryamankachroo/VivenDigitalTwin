@@ -79,8 +79,8 @@ export default function ChatPanel() {
           </svg>
         </div>
         <div>
-          <p className="text-sm font-semibold text-gray-900">Ask your twin</p>
-          <p className="text-xs text-gray-400">Answers from your synced Gmail & Calendar</p>
+          <p className="text-sm font-semibold text-gray-900">Ask Echo</p>
+          <p className="text-xs text-gray-400">Answers from your synced Gmail, Calendar, and Drive</p>
         </div>
         <div className="ml-auto flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-green-500" />
@@ -150,7 +150,7 @@ export default function ChatPanel() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-            placeholder="Ask your digital twin…"
+            placeholder="Ask Echo…"
             className="flex-1 bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none"
           />
           <button

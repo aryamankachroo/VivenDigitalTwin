@@ -41,7 +41,7 @@ export default function OAuth({ onGoogleConnected }) {
       {error && <p className="mt-4 text-red-600">{error}</p>}
       <p className="mx-auto mt-3 max-w-md text-sm text-gray-500">
         After you sign in, we will sync your recent mail and calendar into the
-        twin automatically.
+        Echo assistant automatically.
       </p>
     </div>
   )

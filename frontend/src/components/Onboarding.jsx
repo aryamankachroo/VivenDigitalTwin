@@ -81,7 +81,7 @@ export default function Onboarding({ onBuildTwin }) {
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" fill="white"/>
             </svg>
           </div>
-          <span className="text-lg font-semibold text-gray-900">TwinAI</span>
+          <span className="text-lg font-semibold text-gray-900">Echo</span>
         </div>
 
         <StepIndicator current={step} />
@@ -142,7 +142,7 @@ export default function Onboarding({ onBuildTwin }) {
               onClick={handleContinue}
               className="mt-8 w-full rounded-xl bg-indigo-600 py-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700"
             >
-              Build my twin →
+              Build Echo →
             </button>
             <p className="mt-3 text-center text-xs text-gray-400">
               This will index your last 100 emails, calendar events from the past 14 days, and your last 30 Drive files.
@@ -162,7 +162,7 @@ export default function Onboarding({ onBuildTwin }) {
               </div>
             </div>
 
-            <h2 className="text-2xl font-bold text-gray-900">Your twin is being built</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Echo is being built</h2>
             <p className="mt-2 text-gray-500">
               Indexing your emails, calendar events, and Drive files — this takes about 30–60 seconds.
             </p>

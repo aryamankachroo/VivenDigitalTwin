@@ -127,7 +127,7 @@ export default function DashboardHome({
             {greeting()}, {name}.
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Here's what your twin knows about you.
+            Here's what Echo knows about you.
           </p>
         </div>
 

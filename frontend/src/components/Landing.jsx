@@ -13,7 +13,7 @@ function GoogleIcon() {
   )
 }
 
-function TwinAILogo() {
+function EchoLogo() {
   return (
     <div className="flex items-center gap-2">
       <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600">
@@ -21,7 +21,7 @@ function TwinAILogo() {
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" fill="white"/>
         </svg>
       </div>
-      <span className="text-lg font-semibold text-gray-900">TwinAI</span>
+      <span className="text-lg font-semibold text-gray-900">Echo</span>
     </div>
   )
 }
@@ -117,7 +117,7 @@ export default function Landing({ onGoogleConnected }) {
 
       {/* Nav */}
       <nav className="relative z-10 flex items-center justify-between px-10 py-6">
-        <TwinAILogo />
+        <EchoLogo />
         <a
           href="https://github.com"
           className="text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors"
@@ -139,7 +139,7 @@ export default function Landing({ onGoogleConnected }) {
         </h1>
 
         <p className="mt-5 max-w-lg text-lg text-gray-500 leading-relaxed">
-          TwinAI connects to your Gmail and Google Calendar to build a personal
+          Echo connects to your Gmail and Google Calendar to build a personal
           AI assistant that knows your schedule, emails, and context — so you
           can ask it anything about your own life.
         </p>
@@ -170,7 +170,7 @@ export default function Landing({ onGoogleConnected }) {
             {
               icon: '📧',
               title: 'Gmail Integration',
-              desc: 'Indexes your recent inbox so your twin can answer questions about emails.',
+              desc: 'Indexes your recent inbox so Echo can answer questions about emails.',
             },
             {
               icon: '📅',
@@ -180,7 +180,7 @@ export default function Landing({ onGoogleConnected }) {
             {
               icon: '🤖',
               title: 'Ask Anything',
-              desc: 'Ask in plain English. Your twin answers from your actual data, not guesswork.',
+              desc: 'Ask in plain English. Echo answers from your actual data, not guesswork.',
             },
           ].map((f) => (
             <div key={f.title} className="rounded-2xl border border-gray-200 bg-white/80 p-5 shadow-sm backdrop-blur">

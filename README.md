@@ -1,6 +1,6 @@
-# AryamanKachrooTwin — My AI-powered second brain
+# Echo — My AI-powered second brain
 
-This is a personal digital twin that knows my schedule and inbox. Connect your Google account and ask it anything about your own life — it answers from your actual data, not guesswork.
+This is a personal digital twin that knows my schedule, inbox and drive. Connect your Google account and ask it anything about your own life — it answers from your actual data, not guesswork.
 
 ## What it can do
 
@@ -11,7 +11,7 @@ This is a personal digital twin that knows my schedule and inbox. Connect your G
 
 ## How it gets your data
 
-AryamanKachrooTwin connects to three Google data sources via read-only OAuth 2.0:
+Echo connects to three Google data sources via read-only OAuth 2.0:
 
 **Gmail**
 Fetches your 100 most recent inbox messages and indexes them so you can ask questions about senders, subjects, and content.

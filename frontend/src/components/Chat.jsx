@@ -66,7 +66,7 @@ export default function Chat({ isAuthenticated }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-          placeholder="Ask your digital twin..."
+          placeholder="Ask Echo..."
           className="flex-1 rounded-lg border p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button

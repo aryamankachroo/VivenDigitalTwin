@@ -76,7 +76,7 @@ export default function Integrations({ lastSyncedAt, onSync, syncStats }) {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Integrations</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Manage the data sources connected to your twin.
+          Manage the data sources connected to Echo.
         </p>
       </div>
 
