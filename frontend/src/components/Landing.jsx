@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../api'
 
@@ -30,14 +30,16 @@ export default function Landing({ onGoogleConnected }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [polling, setPolling] = useState(false)
+  const popupRef = useRef(null)
+  const hasNavigatedRef = useRef(false)
 
   const handleMessage = useCallback(
     (event) => {
       if (event?.data?.type === 'auth_success') {
-        onGoogleConnected?.()
+        // OAuth callback succeeded in popup; final navigation still waits until popup closes.
       }
     },
-    [onGoogleConnected]
+    []
   )
 
   useEffect(() => {
@@ -49,6 +51,7 @@ export default function Landing({ onGoogleConnected }) {
     if (!polling) return
     let cancelled = false
     let attempts = 0
+    let isAuthenticated = false
 
     const tick = async () => {
       if (cancelled || attempts > 20) return
@@ -56,14 +59,21 @@ export default function Landing({ onGoogleConnected }) {
       try {
         const res = await axios.get(`${API_BASE}/api/auth/status`)
         if (res.data?.authenticated) {
-          onGoogleConnected?.()
-          return
+          isAuthenticated = true
         }
       } catch {
         // ignore and keep polling
       }
+
+      const popupClosed = !popupRef.current || popupRef.current.closed
+      if (isAuthenticated && popupClosed && !hasNavigatedRef.current) {
+        hasNavigatedRef.current = true
+        onGoogleConnected?.()
+        return
+      }
+
       if (!cancelled) {
-        setTimeout(tick, 2000)
+        setTimeout(tick, 1000)
       }
     }
 
@@ -76,9 +86,14 @@ export default function Landing({ onGoogleConnected }) {
   const handleGoogleLogin = async () => {
     setError('')
     setLoading(true)
+    hasNavigatedRef.current = false
     try {
       const response = await axios.get(`${API_BASE}/auth/google/login`)
-      window.open(response.data.auth_url, '_blank', 'width=500,height=650')
+      popupRef.current = window.open(response.data.auth_url, '_blank', 'width=500,height=650')
+      if (!popupRef.current) {
+        setError('Popup blocked. Please allow popups for localhost and try again.')
+        return
+      }
       setPolling(true)
     } catch (err) {
       setError(err?.response?.data?.error || 'Failed to start Google sign-in. Is the backend running?')
