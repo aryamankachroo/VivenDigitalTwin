@@ -37,6 +37,33 @@ function TypingDots() {
   )
 }
 
+function parseBulletItems(text) {
+  const lines = String(text || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+
+  // Standard bullet lines: "- item"
+  const lineBullets = lines
+    .filter((l) => l.startsWith('- '))
+    .map((l) => l.slice(2).trim())
+    .filter(Boolean)
+  if (lineBullets.length >= 2) return lineBullets
+
+  // Fallback for one-line bullet output: "- item1 - item2 - item3"
+  const flat = String(text || '').trim()
+  if (flat.startsWith('- ') && flat.includes(' - ')) {
+    const compact = flat.slice(2).trim()
+    const parts = compact
+      .split(/\s-\s(?=[A-Z0-9])/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+    if (parts.length >= 2) return parts
+  }
+
+  return null
+}
+
 export default function ChatPanel() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -126,7 +153,15 @@ export default function ChatPanel() {
                       : 'rounded-bl-sm bg-gray-100 text-gray-800'
                   }`}
                 >
-                  {msg.content}
+                  {msg.role === 'assistant' && parseBulletItems(msg.content) ? (
+                    <ul className="list-disc pl-5 space-y-1">
+                      {parseBulletItems(msg.content).map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                  )}
                 </div>
               </div>
             ))}

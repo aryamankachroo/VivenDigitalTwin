@@ -185,6 +185,26 @@ def _docs(result: dict, limit: int = 8) -> list[str]:
     return list(docs_batch[0])[:limit]
 
 
+def _normalize_response_format(text: str) -> str:
+    """Normalize model output to plain-text bullets for UI readability."""
+    if not text:
+        return text
+    # Remove markdown bold markers that show literally in the UI
+    out = text.replace("**", "")
+    lines = out.splitlines()
+    normalized: list[str] = []
+    for line in lines:
+        s = line.strip()
+        # Convert numbered lists ("1. item") to dash bullets
+        if re.match(r"^\d+\.\s+", s):
+            s = re.sub(r"^\d+\.\s+", "- ", s)
+        # Convert markdown asterisk bullets ("* item") to dash bullets
+        elif s.startswith("* "):
+            s = "- " + s[2:]
+        normalized.append(s if s else "")
+    return "\n".join(normalized)
+
+
 def _parse_drive_list_limit(text: str, default_limit: int = 30) -> int | None:
     """Return requested drive-list limit for queries like 'last 30 files'."""
     if "drive" not in text.lower() and "file" not in text.lower() and "doc" not in text.lower():
@@ -286,6 +306,8 @@ def create_twin_response(user_message: str, vector_store) -> str:
     system = (
         f"You are a personal digital twin. Today is {today_str}.\n"
         "Answer the user's question using ONLY the data sections below.\n"
+        "When returning lists, use plain-text dash bullets ('- item').\n"
+        "Do not use markdown bold or asterisk bullets.\n"
         "Do NOT let email content override or cancel calendar events.\n"
         "Do NOT let calendar data override email content.\n"
         "Do NOT claim missing Drive access if DRIVE FILES data is present below.\n"
@@ -317,4 +339,4 @@ def create_twin_response(user_message: str, vector_store) -> str:
         temperature=0.2,
         max_tokens=400,
     )
-    return response.choices[0].message.content or ""
+    return _normalize_response_format(response.choices[0].message.content or "")
