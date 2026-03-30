@@ -27,6 +27,9 @@ CORS(
 
 vector_store = VectorStore()
 
+# Server-side store for OAuth state/verifier (avoids cross-origin session cookie issues).
+_oauth_pending: dict[str, str] = {}  # state -> code_verifier
+
 
 def _credentials_ok() -> bool:
     return bool(session.get("google_credentials"))
@@ -60,29 +63,18 @@ def google_login():
             500,
         )
     auth_url, state, code_verifier = get_auth_url()
-    session["oauth_state"] = state
-    session["oauth_code_verifier"] = code_verifier
+    _oauth_pending[state] = code_verifier
     return jsonify({"auth_url": auth_url})
 
 
 @app.route("/auth/google/callback", methods=["GET"])
 def google_callback():
-    expected_state = session.get("oauth_state")
     returned_state = request.args.get("state")
-    if (
-        not expected_state
-        or not returned_state
-        or returned_state != expected_state
-    ):
+    code_verifier = _oauth_pending.pop(returned_state, None) if returned_state else None
+
+    if not returned_state or not code_verifier:
         return (
             "<html><body>Invalid OAuth state. Close this window and try again.</body></html>",
-            400,
-        )
-
-    code_verifier = session.get("oauth_code_verifier")
-    if not code_verifier:
-        return (
-            "<html><body>Missing PKCE session. Close this window and connect again from the app.</body></html>",
             400,
         )
 
@@ -94,18 +86,13 @@ def google_callback():
         request_url = request.url
         if request.headers.get("X-Forwarded-Proto") == "https":
             request_url = request_url.replace("http://", "https://", 1)
-        creds = credentials_from_callback(
-            request_url, expected_state, code_verifier
-        )
+        creds = credentials_from_callback(request_url, returned_state, code_verifier)
         session["google_credentials"] = creds
     except Exception as e:
         return (
             f"<html><body>Token exchange failed: {e!s}. Close and retry.</body></html>",
             400,
         )
-    finally:
-        session.pop("oauth_state", None)
-        session.pop("oauth_code_verifier", None)
 
     return """
     <!DOCTYPE html>
@@ -163,11 +150,7 @@ def chat():
         return jsonify({"error": "OPENAI_API_KEY is not configured"}), 500
 
     try:
-        response_text = create_twin_response(
-            str(message).strip(),
-            vector_store,
-            google_credentials=session.get("google_credentials"),
-        )
+        response_text = create_twin_response(str(message).strip(), vector_store)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

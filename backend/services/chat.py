@@ -1,4 +1,5 @@
 import re
+from datetime import date, timedelta
 
 from openai import OpenAI
 
@@ -6,6 +7,86 @@ import config
 
 _client: OpenAI | None = None
 
+# ── intent detection ──────────────────────────────────────────────────────────
+
+_CALENDAR_WORDS = re.compile(
+    r"\b(meeting|meetings|event|events|schedule|calendar|class|classes|"
+    r"appointment|appointments|lecture|lectures|seminar|session|sessions|"
+    r"what do i have|what's on|whats on|am i free|am i busy|do i have)\b",
+    re.IGNORECASE,
+)
+_EMAIL_WORDS = re.compile(
+    r"\b(email|emails|inbox|message|messages|mail|sender|subject|received|"
+    r"last email|recent email|unread)\b",
+    re.IGNORECASE,
+)
+
+_DAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+
+def _intent(text: str) -> str:
+    has_cal = bool(_CALENDAR_WORDS.search(text))
+    has_email = bool(_EMAIL_WORDS.search(text))
+    if has_cal and not has_email:
+        return "calendar"
+    if has_email and not has_cal:
+        return "email"
+    return "both"
+
+
+# ── date window resolver ──────────────────────────────────────────────────────
+
+def _resolve_date_window(text: str) -> tuple[date, date] | None:
+    """
+    Parse time references in the user's message and return (start, end) dates.
+    Returns None if no specific date reference is found (fall back to vector search).
+    """
+    today = date.today()
+    t = text.lower()
+
+    if "tomorrow" in t:
+        d = today + timedelta(days=1)
+        return (d, d)
+
+    if "yesterday" in t:
+        d = today - timedelta(days=1)
+        return (d, d)
+
+    if "today" in t or "tonight" in t or "right now" in t:
+        return (today, today)
+
+    # week ranges
+    week_start = today - timedelta(days=today.weekday())  # Monday of current week
+    if "next week" in t:
+        s = week_start + timedelta(days=7)
+        return (s, s + timedelta(days=6))
+    if "last week" in t:
+        s = week_start - timedelta(days=7)
+        return (s, s + timedelta(days=6))
+    if "this week" in t:
+        return (week_start, week_start + timedelta(days=6))
+
+    # named days: "on Monday", "last Monday", "next Friday", etc.
+    for i, day in enumerate(_DAY_NAMES):
+        if day in t:
+            delta = (i - today.weekday()) % 7
+            if "last " + day in t:
+                # explicitly last occurrence
+                delta = delta - 7 if delta != 0 else -7
+                d = today + timedelta(days=delta)
+            elif "next " + day in t or delta == 0:
+                # next occurrence (or same weekday = next week)
+                delta = delta if delta != 0 else 7
+                d = today + timedelta(days=delta)
+            else:
+                # bare day name: nearest upcoming
+                d = today + timedelta(days=delta)
+            return (d, d)
+
+    return None  # no date reference found
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
 
 def _get_client() -> OpenAI:
     global _client
@@ -17,206 +98,75 @@ def _get_client() -> OpenAI:
     return _client
 
 
-def _wants_numbered_recent_inbox(text: str) -> bool:
-    """Follow-ups like 'the email before that' need several newest messages, not RAG."""
-    t = text.lower()
-    if re.search(r"\bbefore\b.{0,35}\b(that|this|it)\b", t):
-        return True
-    if re.search(r"\b(that|this|it)\b.{0,25}\bbefore\b", t):
-        return True
-    if re.search(r"\b(previous|prior)\b.{0,25}\b(e-?mail|message)\b", t):
-        return True
-    if re.search(r"\b(e-?mail|message)\b.{0,30}\bbefore\b", t):
-        return True
-    if re.search(r"\bsecond\b.{0,30}\b(e-?mail|message|last|one)\b", t):
-        return True
-    if re.search(r"\b2nd\b", t) and re.search(r"\b(e-?mail|message)\b", t):
-        return True
-    if re.search(r"\bearlier\b.{0,20}\b(e-?mail|message|one)\b", t):
-        return True
-    if re.search(r"\bone before\b", t):
-        return True
-    return False
-
-
-def _wants_latest_inbox_email(text: str) -> bool:
-    """Single 'last / latest email' question."""
-    t = text.lower()
-    if not re.search(r"\b(e-?mails?|messages?)\b", t):
-        return False
-    return bool(
-        re.search(
-            r"\b(last|latest|most recent|newest|just got|receive|received)\b",
-            t,
-        )
-    )
-
-
-_RECENT_COUNT_WORDS = {
-    "one": 1,
-    "two": 2,
-    "three": 3,
-    "four": 4,
-    "five": 5,
-    "six": 6,
-    "seven": 7,
-    "eight": 8,
-    "nine": 9,
-    "ten": 10,
-    "1": 1,
-    "2": 2,
-    "3": 3,
-    "4": 4,
-    "5": 5,
-    "6": 6,
-    "7": 7,
-    "8": 8,
-    "9": 9,
-    "10": 10,
-}
-
-
-def _explicit_recent_email_count(text: str) -> int | None:
-    """Parse 'last two emails', 'last 5 messages', etc. (avoids fetching only 1)."""
-    t = text.lower()
-    if not re.search(r"\b(e-?mails?|messages?)\b", t):
-        return None
-    m = re.search(
-        r"\blast\s+(one|two|three|four|five|six|seven|eight|nine|ten|"
-        r"1|2|3|4|5|6|7|8|9|10)\s+(e-?mails?|messages?)\b",
-        t,
-    )
-    if m:
-        return _RECENT_COUNT_WORDS.get(m.group(1))
-    m = re.search(
-        r"\b(one|two|three|four|five|six|seven|eight|nine|ten|"
-        r"1|2|3|4|5|6|7|8|9|10)\s+(most recent|latest)\s+(e-?mails?|messages?)\b",
-        t,
-    )
-    if m:
-        return _RECENT_COUNT_WORDS.get(m.group(1))
-    return None
-
-
-def _live_inbox_fetch_count(user_message: str) -> int:
-    if _wants_numbered_recent_inbox(user_message):
-        return 12
-    n = _explicit_recent_email_count(user_message)
-    if n is not None:
-        return min(max(1, n), 20)
-    if _wants_latest_inbox_email(user_message):
-        return 1
-    return 0
-
-
-def _authoritative_recent_inbox_block(credentials_dict: dict, n: int) -> str | None:
-    from integrations.gmail import get_recent_emails
-
-    emails = get_recent_emails(credentials_dict, max_results=max(1, n))
-    if not emails:
-        return None
-    lines = [
-        "NUMBERED_INBOX_MESSAGES (sorted by Gmail internalDate; 1=newest):",
-        f"Showing the {len(emails)} newest messages in this pull.",
-        "",
-    ]
-    for i, e in enumerate(emails, start=1):
-        excerpt = (e.get("body") or "")[:320]
-        lines.append(
-            f"{i}. Subject: {e['subject']}\n"
-            f"   From: {e['from']}\n"
-            f"   Date: {e['date']}\n"
-            f"   Body excerpt: {excerpt}"
-        )
-        lines.append("")
-    return "\n".join(lines).strip()
-
-
-def _docs_from_chroma_result(result: dict, limit: int = 3) -> list[str]:
+def _docs(result: dict, limit: int = 8) -> list[str]:
     docs_batch = result.get("documents") or []
     if not docs_batch or not docs_batch[0]:
         return []
     return list(docs_batch[0])[:limit]
 
 
-def generate_response(
-    user_message: str,
-    context_data: dict,
-    *,
-    extra_context_blocks: list[str] | None = None,
-) -> str:
-    extra_context_blocks = extra_context_blocks or []
-    email_docs = _docs_from_chroma_result(context_data.get("emails") or {}, 4)
-    cal_docs = _docs_from_chroma_result(context_data.get("calendar") or {}, 4)
+# ── main entry point ──────────────────────────────────────────────────────────
 
-    if not email_docs and not cal_docs and not extra_context_blocks:
+def create_twin_response(user_message: str, vector_store) -> str:
+    intent = _intent(user_message)
+    cal_docs: list[str] = []
+    email_docs: list[str] = []
+
+    if intent in ("calendar", "both"):
+        date_window = _resolve_date_window(user_message)
+        if date_window:
+            # Date-based query: skip vector search, filter directly by date
+            cal_docs = vector_store.get_events_in_range(*date_window)
+            date_label = (
+                date_window[0].strftime("%A, %B %d").replace(" 0", " ")
+                if date_window[0] == date_window[1]
+                else f"{date_window[0]} \u2013 {date_window[1]}"
+            )
+            if not cal_docs:
+                cal_note = f"[No calendar events found for {date_label}]"
+                cal_docs = [cal_note]
+        else:
+            # General calendar query (no date): use vector search
+            context_data = vector_store.query(user_message, n_results=10)
+            cal_docs = _docs(context_data.get("calendar") or {}, 8)
+
+    if intent in ("email", "both"):
+        context_data = vector_store.query(user_message, n_results=10)
+        email_docs = _docs(context_data.get("emails") or {}, 8)
+
+    if not cal_docs and not email_docs:
         return (
-            "I did not find any synced emails or calendar events that match "
-            "that question. Try Sync again after new mail or events, or ask "
-            "about something that appears in your recent sync."
+            "I do not have that in the synced data. "
+            "Try clicking Sync again to refresh, then ask again."
         )
 
-    context = (
-        "You are a personal assistant with STRICT grounding rules.\n"
-        "- Use ONLY the EMAIL and CALENDAR excerpts below. Treat them as the "
-        "only source of truth.\n"
-        "- If a NUMBERED_INBOX_MESSAGES block is present: message 1 is the "
-        "newest in Gmail; 2 is the next oldest, etc. Use it for 'last email', "
-        "'last N emails', 'email before that', 'second most recent', etc.\n"
-        "- If only a single-message authoritative block is present, use it for "
-        "'latest/last email' questions.\n"
-        "- Calendar lines may be past or future; use dates/times exactly as "
-        "written in the excerpts.\n"
-        "- Do NOT invent meetings, emails, or times.\n"
-        "- If the excerpts do not answer the question, say you do not have "
-        "that in the synced data and suggest syncing or rephrasing.\n"
-        "- Do not mention unrelated future meetings when the user only asked "
-        "about a specific period unless those events fall in that period per "
-        "the excerpts.\n\n"
+    today_str = date.today().strftime("%A, %B %d, %Y").replace(" 0", " ")
+    system = (
+        f"You are a personal digital twin. Today is {today_str}.\n"
+        "Answer the user's question using ONLY the data sections below.\n"
+        "Do NOT let email content override or cancel calendar events.\n"
+        "Do NOT let calendar data override email content.\n"
+        "Each section is a separate, authoritative source. "
+        "If the answer is not in the data, say so.\n\n"
     )
 
-    if extra_context_blocks:
-        context += "AUTHORITATIVE:\n"
-        for block in extra_context_blocks:
-            context += f"{block}\n\n"
+    if cal_docs:
+        system += "CALENDAR EVENTS (from Google Calendar):\n"
+        for doc in cal_docs:
+            system += f"{doc}\n\n"
 
     if email_docs:
-        context += "EMAIL EXCERPTS (vector search):\n"
+        system += "EMAILS (from Gmail):\n"
         for doc in email_docs:
-            context += f"{doc}\n\n"
-
-    if cal_docs:
-        context += "CALENDAR EXCERPTS:\n"
-        for doc in cal_docs:
-            context += f"{doc}\n\n"
-
-    messages = [
-        {"role": "system", "content": context},
-        {"role": "user", "content": user_message},
-    ]
+            system += f"{doc}\n\n"
 
     response = _get_client().chat.completions.create(
         model="gpt-4o-mini",
-        messages=messages,
-        temperature=0.35,
-        max_tokens=350,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_message},
+        ],
+        temperature=0.2,
+        max_tokens=400,
     )
     return response.choices[0].message.content or ""
-
-
-def create_twin_response(
-    user_message: str,
-    vector_store,
-    google_credentials: dict | None = None,
-) -> str:
-    extras: list[str] = []
-    n_live = _live_inbox_fetch_count(user_message) if google_credentials else 0
-    if google_credentials and n_live:
-        block = _authoritative_recent_inbox_block(google_credentials, n_live)
-        if block:
-            extras.append(block)
-
-    context_data = vector_store.query(user_message, n_results=8)
-    return generate_response(
-        user_message, context_data, extra_context_blocks=extras
-    )

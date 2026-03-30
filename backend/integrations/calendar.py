@@ -19,56 +19,39 @@ def _format_event(event: dict) -> dict:
     }
 
 
-def _list_events(
+def get_calendar_events_for_sync(
     credentials_dict: dict,
-    time_min: str,
-    time_max: str | None,
-    max_results: int,
+    days_back: int = 14,
+    days_forward: int = 14,
 ) -> list[dict]:
+    """All events from days_back ago through days_forward from now, paginated."""
     credentials = credentials_from_session(credentials_dict)
     service = build("calendar", "v3", credentials=credentials)
 
-    kwargs: dict = {
-        "calendarId": "primary",
-        "timeMin": time_min,
-        "maxResults": max_results,
-        "singleEvents": True,
-        "orderBy": "startTime",
-    }
-    if time_max is not None:
-        kwargs["timeMax"] = time_max
-
-    events_result = service.events().list(**kwargs).execute()
-    items = events_result.get("items", [])
-    return [_format_event(e) for e in items]
-
-
-def get_upcoming_events(credentials_dict: dict, max_results: int = 20) -> list[dict]:
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    return _list_events(
-        credentials_dict, time_min=now, time_max=None, max_results=max_results
-    )
-
-
-def get_past_events(
-    credentials_dict: dict, days_back: int = 21, max_results: int = 100
-) -> list[dict]:
-    """Events that already started (through now), for RAG queries like 'last week'."""
     now = datetime.now(timezone.utc)
-    time_max = now.isoformat().replace("+00:00", "Z")
     time_min = (now - timedelta(days=days_back)).isoformat().replace("+00:00", "Z")
-    return _list_events(
-        credentials_dict, time_min=time_min, time_max=time_max, max_results=max_results
-    )
+    time_max = (now + timedelta(days=days_forward)).isoformat().replace("+00:00", "Z")
 
+    out: list[dict] = []
+    page_token: str | None = None
 
-def get_calendar_events_for_sync(credentials_dict: dict) -> list[dict]:
-    """Past window + upcoming, deduped by event id for the vector store."""
-    past = get_past_events(credentials_dict)
-    upcoming = get_upcoming_events(credentials_dict)
-    by_id: dict[str, dict] = {}
-    for e in past + upcoming:
-        eid = e.get("id") or ""
-        key = eid if eid else f"__noid_{len(by_id)}"
-        by_id[key] = e
-    return list(by_id.values())
+    while True:
+        kwargs: dict = {
+            "calendarId": "primary",
+            "timeMin": time_min,
+            "timeMax": time_max,
+            "singleEvents": True,
+            "orderBy": "startTime",
+            "maxResults": 250,
+        }
+        if page_token:
+            kwargs["pageToken"] = page_token
+
+        result = service.events().list(**kwargs).execute()
+        for item in result.get("items", []):
+            out.append(_format_event(item))
+        page_token = result.get("nextPageToken")
+        if not page_token:
+            break
+
+    return out
