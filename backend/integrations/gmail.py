@@ -55,6 +55,17 @@ def _parse_message_to_email(message: dict, msg_id: str) -> dict:
     }
 
 
+def get_user_email(credentials_dict: dict) -> str:
+    """Return the authenticated user's Gmail address."""
+    try:
+        credentials = credentials_from_session(credentials_dict)
+        service = build("gmail", "v1", credentials=credentials)
+        profile = service.users().getProfile(userId="me").execute()
+        return profile.get("emailAddress", "")
+    except Exception:
+        return ""
+
+
 def get_recent_emails(credentials_dict: dict, max_results: int = 20) -> list[dict]:
     """Return up to ``max_results`` inbox messages newest-first by ``internalDate``.
 

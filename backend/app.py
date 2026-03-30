@@ -8,7 +8,7 @@ from flask_cors import CORS
 import config
 from auth import credentials_from_callback, get_auth_url
 from integrations.calendar import get_calendar_events_for_sync
-from integrations.gmail import get_recent_emails
+from integrations.gmail import get_recent_emails, get_user_email
 from services.chat import create_twin_response
 from services.embeddings import VectorStore
 
@@ -46,6 +46,7 @@ def auth_status():
         {
             "authenticated": _credentials_ok(),
             "last_synced_at": session.get("last_synced_at"),
+            "user_email": session.get("user_email", ""),
         }
     )
 
@@ -123,6 +124,10 @@ def sync_data():
     now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     session["last_synced_at"] = now_iso
 
+    # Cache user email so auth_status can return it without extra API call
+    if not session.get("user_email"):
+        session["user_email"] = get_user_email(credentials)
+
     counts = vector_store.collection_counts()
 
     return jsonify(
@@ -132,8 +137,35 @@ def sync_data():
             "last_synced_at": now_iso,
             "index_email_documents": counts["emails"],
             "index_calendar_documents": counts["calendar"],
+            "user_email": session.get("user_email", ""),
         }
     )
+
+
+@app.route("/api/calendar/upcoming", methods=["GET"])
+def calendar_upcoming():
+    if not _credentials_ok():
+        return jsonify({"error": "Not authenticated"}), 401
+
+    from datetime import date, timedelta
+
+    today = date.today()
+    docs = vector_store.get_events_in_range(today, today + timedelta(days=14))
+
+    events = []
+    for doc in docs[:5]:
+        ev: dict = {}
+        for line in doc.strip().splitlines():
+            if line.startswith("Event:"):
+                ev["summary"] = line[len("Event:"):].strip()
+            elif line.startswith("Start:"):
+                ev["start"] = line[len("Start:"):].strip()
+            elif line.startswith("End:"):
+                ev["end"] = line[len("End:"):].strip()
+        if ev.get("summary"):
+            events.append(ev)
+
+    return jsonify({"events": events})
 
 
 @app.route("/api/chat", methods=["POST"])
